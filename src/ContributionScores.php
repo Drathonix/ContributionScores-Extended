@@ -71,6 +71,15 @@ class ContributionScores extends IncludableSpecialPage {
 					$revWhere['joins']
 				);
 				$output = $wgLang->formatNum( $row->page_count );
+			} elseif ( $metric == 'diff') {
+				$row = $dbr->selectRow(
+					[ 'revision' ] + $revWhere['tables'],
+					[ 'page_count' => 'SUM(ABS(rev_len))' ],
+					$revWhere['conds'],
+					__METHOD__,
+					[],
+					$revWhere['joins']
+				);
 			} else {
 				$output = wfMessage( 'contributionscores-invalidmetric' )->text();
 			}
