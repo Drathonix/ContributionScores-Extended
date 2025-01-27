@@ -4,6 +4,7 @@
  */
 
 use MediaWiki\MediaWikiServices;
+use DairikiDiff;
 
 /// Special page class for the Contribution Scores extension
 /**
@@ -25,6 +26,74 @@ class ContributionScores extends IncludableSpecialPage {
 		$parser->setFunctionHook( 'cscore', [ self::class, 'efContributionScoresRender' ] );
 	}
 
+	public static function computeAbsDiff($dbr,$user){
+		$revisionLookup = MediaWikiServices::getInstance()->getRevisionLookup();
+		# Collect all revisions by the target user
+		$resultSet = $dbr->newSelectQueryBuilder()
+			->select( ['rev_id','rev_parent_id'] )
+			->from( 'revision' )
+			# TODO: Switch to some form of integration with ActorMigration 
+			->join( 'actor', null, 'rev_actor=actor_id' )
+			->join( 'user', null, 'user_id=actor_user' )
+			->where( ['user_name' => $user] )
+			->caller(__METHOD__)
+			->fetchResultSet();
+		$output = 0;
+		# Calculate abs diff.
+		foreach ( $resultSet as $row ){
+			# Gets the user's revision record and its content object.
+			$userRevisionRecord = $revisionLookup->getRevisionById($row->rev_id);
+			$userContent = $userRevisionRecord->getContent("main");			
+			# Get the parent revision content object for diff calc.
+			$parentRevision = $revisionLookup->getRevisionById( $userRevisionRecord->getParentId());
+			$diff;
+			if( $parentRevision != null ) {
+				$parentContent = $parentRevision->getContent("main");
+				$diff = $userContent->diff($parentContent);
+			}
+			# Indicates page was created.
+			else{
+				$diff = new Diff([$userContent->serialize()],[""]);
+			}
+			# Calculate absdiff for each edit.
+			foreach( $diff->getEdits() as $op) {
+				if($op->getType() == 'change') {
+					$len = min($op->nclosing(),$op->norig());
+					for($x = 0; $x < $len; $x++){
+						$output = $output + abs( strlen( $op->getClosing()[$x] )- strlen( $op->getOrig()[$x] ));
+					}
+				}
+				/*$output = $output . '[';
+					foreach( $op->getClosing() as $a ){
+						$output = $output . $a . ', ';
+					}
+					$output = $output . '], [';
+					foreach( $op->getOrig() as $a ){
+						$output = $output . $a . ', ';
+					}
+				$output = $output . '], ' . $op->getType() . ', ' . $op->nclosing() . ', ' . $op->norig() . "\n";*/
+			}
+		
+		}
+		return $output;
+	}
+	
+	public static function computeUniquePages($dbr, $user, $revWhere){
+		$row = $dbr->selectRow(
+			[ 'revision' ] + $revWhere['tables'],
+			[ 'page_count' => 'COUNT(DISTINCT rev_page)' ],
+			$revWhere['conds'],
+			__METHOD__,
+			[],
+			$revWhere['joins']
+		);
+		return $row->page_count;
+	}
+	
+	public static function computeScore($dbr, $user, $revWhere){
+		return ContributionScores::computeUniquePages($dbr,$user,$revWhere)*2 + ContributionScores::computeAbsDiff($dbr,$user)/100;
+	}
+
 	public static function efContributionScoresRender( $parser, $usertext, $metric = 'score' ) {
 		global $wgContribScoreDisableCache, $wgContribScoreUseRoughEditCount;
 
@@ -42,15 +111,7 @@ class ContributionScores extends IncludableSpecialPage {
 
 			$revWhere = ActorMigration::newMigration()->getWhere( $dbr, 'rev_user', $user );
 			if ( $metric == 'score' ) {
-				$row = $dbr->selectRow(
-					[ 'revision' ] + $revWhere['tables'],
-					[ 'wiki_rank' => "COUNT(DISTINCT rev_page)+SQRT($revVar-COUNT(DISTINCT rev_page))*2" ],
-					$revWhere['conds'],
-					__METHOD__,
-					[],
-					$revWhere['joins']
-				);
-				$output = $wgLang->formatNum( round( $row->wiki_rank, 0 ) );
+				return $wgLang->formatNum( round( ContributionScores::computeScore( $dbr, $user, $revWhere ) ) );
 			} elseif ( $metric == 'changes' ) {
 				$row = $dbr->selectRow(
 					[ 'revision' ] + $revWhere['tables'],
@@ -62,24 +123,9 @@ class ContributionScores extends IncludableSpecialPage {
 				);
 				$output = $wgLang->formatNum( $row->rev_count );
 			} elseif ( $metric == 'pages' ) {
-				$row = $dbr->selectRow(
-					[ 'revision' ] + $revWhere['tables'],
-					[ 'page_count' => 'COUNT(DISTINCT rev_page)' ],
-					$revWhere['conds'],
-					__METHOD__,
-					[],
-					$revWhere['joins']
-				);
-				$output = $wgLang->formatNum( $row->page_count );
-			} elseif ( $metric == 'diff') {
-				$row = $dbr->selectRow(
-					[ 'revision' ] + $revWhere['tables'],
-					[ 'page_count' => 'SUM(ABS(rev_len))' ],
-					$revWhere['conds'],
-					__METHOD__,
-					[],
-					$revWhere['joins']
-				);
+				return $wgLang->formatNum( ContributionScores::computeUniquePages( $dbr, $user, $revWhere ) );
+			} elseif ( $metric == 'absdiff') {
+				return $wgLang->formatNum( ContributionScores::computeAbsDiff( $dbr, $user ) );
 			} else {
 				$output = wfMessage( 'contributionscores-invalidmetric' )->text();
 			}
