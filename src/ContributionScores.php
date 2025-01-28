@@ -25,6 +25,42 @@ class ContributionScores extends IncludableSpecialPage {
 	public static function onParserFirstCallInit( Parser $parser ) {
 		$parser->setFunctionHook( 'cscore', [ self::class, 'efContributionScoresRender' ] );
 	}
+	
+	# taken from: https://www.php.net/manual/en/function.sort.php
+	private static function array_sort($array, $on, $order=SORT_ASC)
+	{
+		$new_array = array();
+		$sortable_array = array();
+
+		if (count($array) > 0) {
+			foreach ($array as $k => $v) {
+				if (is_array($v)) {
+					foreach ($v as $k2 => $v2) {
+						if ($k2 == $on) {
+							$sortable_array[$k] = $v2;
+						}
+					}
+				} else {
+					$sortable_array[$k] = $v;
+				}
+			}
+
+			switch ($order) {
+				case SORT_ASC:
+					asort($sortable_array);
+				break;
+				case SORT_DESC:
+					arsort($sortable_array);
+				break;
+			}
+
+			foreach ($sortable_array as $k => $v) {
+				$new_array[$k] = $array[$k];
+			}
+		}
+
+		return $new_array;
+	}
 
 	public static function computeAbsDiff($dbr,$user){
 		$revisionLookup = MediaWikiServices::getInstance()->getRevisionLookup();
@@ -63,36 +99,46 @@ class ContributionScores extends IncludableSpecialPage {
 						$output = $output + abs( strlen( $op->getClosing()[$x] )- strlen( $op->getOrig()[$x] ));
 					}
 				}
-				/*$output = $output . '[';
-					foreach( $op->getClosing() as $a ){
-						$output = $output . $a . ', ';
-					}
-					$output = $output . '], [';
-					foreach( $op->getOrig() as $a ){
-						$output = $output . $a . ', ';
-					}
-				$output = $output . '], ' . $op->getType() . ', ' . $op->nclosing() . ', ' . $op->norig() . "\n";*/
 			}
 		
 		}
 		return $output;
 	}
 	
-	public static function computeUniquePages($dbr, $user, $revWhere){
+	public static function computeUniquePages($dbr, $user, $where){
+		$migrate = ActorMigration::newMigration()->getWhere( $dbr, 'rev_user', $user);
+		$migrate['conds'] . $where;
 		$row = $dbr->selectRow(
-			[ 'revision' ] + $revWhere['tables'],
+			[ 'revision' ] + $migrate['tables'],
 			[ 'page_count' => 'COUNT(DISTINCT rev_page)' ],
-			$revWhere['conds'],
+			$migrate['conds'],
 			__METHOD__,
 			[],
-			$revWhere['joins']
+			$migrate['joins']
 		);
 		return $row->page_count;
 	}
 	
+	public static function computeChanges($dbr, $user, $where){
+		global $wgContribScoreUseRoughEditCount;
+		$migrate = ActorMigration::newMigration()->getWhere( $dbr, 'rev_user', $user);
+		$migrate['conds'] . $where;		
+		$revVar = $wgContribScoreUseRoughEditCount ? 'user_editcount' : 'COUNT(rev_id)';
+		$row = $dbr->selectRow(
+			[ 'revision' ] + $migrate['tables'],
+			[ 'rev_count' => $revVar ],
+			$migrate['conds'],
+			__METHOD__,
+			[],
+			$migrate['joins']
+		);
+		return $row->rev_count;
+	}	
+	
 	public static function computeScore($dbr, $user, $revWhere){
 		return ContributionScores::computeUniquePages($dbr,$user,$revWhere)*2 + ContributionScores::computeAbsDiff($dbr,$user)/100;
 	}
+	
 
 	public static function efContributionScoresRender( $parser, $usertext, $metric = 'score' ) {
 		global $wgContribScoreDisableCache, $wgContribScoreUseRoughEditCount;
@@ -107,25 +153,16 @@ class ContributionScores extends IncludableSpecialPage {
 
 		if ( $user instanceof User && $user->isRegistered() ) {
 			global $wgLang;
-			$revVar = $wgContribScoreUseRoughEditCount ? 'user_editcount' : 'COUNT(rev_id)';
 
 			$revWhere = ActorMigration::newMigration()->getWhere( $dbr, 'rev_user', $user );
 			if ( $metric == 'score' ) {
-				return $wgLang->formatNum( round( ContributionScores::computeScore( $dbr, $user, $revWhere ) ) );
+				$output = $wgLang->formatNum( round( ContributionScores::computeScore( $dbr, $user, $revWhere ) ) );
 			} elseif ( $metric == 'changes' ) {
-				$row = $dbr->selectRow(
-					[ 'revision' ] + $revWhere['tables'],
-					[ 'rev_count' => $revVar ],
-					$revWhere['conds'],
-					__METHOD__,
-					[],
-					$revWhere['joins']
-				);
-				$output = $wgLang->formatNum( $row->rev_count );
+				$output = $wgLang->formatNum( ContributionScores::computeChanges( $dbr, $user, $revWhere ) );
 			} elseif ( $metric == 'pages' ) {
-				return $wgLang->formatNum( ContributionScores::computeUniquePages( $dbr, $user, $revWhere ) );
+				$output = $wgLang->formatNum( ContributionScores::computeUniquePages( $dbr, $user, $revWhere ) );
 			} elseif ( $metric == 'absdiff') {
-				return $wgLang->formatNum( ContributionScores::computeAbsDiff( $dbr, $user ) );
+				$output = $wgLang->formatNum( ContributionScores::computeAbsDiff( $dbr, $user ) );
 			} else {
 				$output = wfMessage( 'contributionscores-invalidmetric' )->text();
 			}
@@ -134,7 +171,6 @@ class ContributionScores extends IncludableSpecialPage {
 		}
 		return $parser->insertStripItem( $output, $parser->getStripState() );
 	}
-
 	/**
 	 * Function fetch Contribution Scores data from database
 	 *
@@ -142,118 +178,77 @@ class ContributionScores extends IncludableSpecialPage {
 	 * @param int $limit Maximum number of users to return (default 50)
 	 * @return array Data including the requested Contribution Scores.
 	 */
-	public static function getContributionScoreData( $days, $limit ) {
-		global $wgContribScoreIgnoreBots, $wgContribScoreIgnoreBlockedUsers, $wgContribScoreIgnoreUsernames,
-			$wgContribScoreUseRoughEditCount;
-
+	public static function getContributionScoreData( $days = 0, $limit = 50) {
+		global $wgContribScoreIgnoreBots, $wgContribScoreIgnoreBlockedUsers, $wgContribScoreIgnoreUsernames;
+		
 		$loadBalancer = MediaWikiServices::getInstance()->getDBLoadBalancer();
 		$dbr = $loadBalancer->getConnection( DB_REPLICA );
-
-		$revQuery = ActorMigration::newMigration()->getJoin( 'rev_user' );
-		$revQuery['tables'] = array_merge( [ 'revision' ], $revQuery['tables'] );
-
-		$revUser = $revQuery['fields']['rev_user'];
-		$revUsername = $revQuery['fields']['rev_user_text'];
-
-		$sqlWhere = [];
-
-		if ( $days > 0 ) {
-			$date = time() - ( 60 * 60 * 24 * $days );
-			$sqlWhere[] = 'rev_timestamp > ' . $dbr->addQuotes( $dbr->timestamp( $date ) );
-		}
-
-		$sqlVars = [
-			'rev_user'   => $revUser,
-			'page_count' => 'COUNT(DISTINCT rev_page)'
-		];
-		if ( $wgContribScoreUseRoughEditCount ) {
-			$revQuery['tables'][] = 'user';
-			$revQuery['joins']['user'] = [ 'LEFT JOIN', [ "$revUser != 0", "user_id = $revUser" ] ];
-			$sqlVars['rev_count'] = 'user_editcount';
-		} else {
-			$sqlVars['rev_count'] = 'COUNT(rev_id)';
-		}
+		$userQuery = $dbr->newSelectQueryBuilder()
+			->select('user_id','user_name')
+			->from('user')
+			->where('user_editcount > 0');
+	
 
 		if ( $wgContribScoreIgnoreBlockedUsers ) {
-			$sqlWhere[] = "{$revUser} NOT IN " .
-				$dbr->buildSelectSubquery( 'ipblocks', 'ipb_user', 'ipb_user <> 0', __METHOD__ );
+			$userQuery = $userQuery
+				->where("user_id NOT IN (SELECT ipb_user FROM `ipblocks` WHERE user_id = ipb_user)"
+			);
 		}
 
 		if ( $wgContribScoreIgnoreBots ) {
-			$sqlWhere[] = "{$revUser} NOT IN " .
-				$dbr->buildSelectSubquery( 'user_groups', 'ug_user', [
-					'ug_group' => 'bot',
-					'ug_expiry IS NULL OR ug_expiry >= ' . $dbr->addQuotes( $dbr->timestamp() )
-				], __METHOD__ );
+			$userQuery = $userQuery
+				->where("user_id NOT IN (SELECT ug_user FROM `user_groups` WHERE (ug_group = 'bot' AND (ug_expiry IS NULL OR ug_expiry >= " . $dbr->addQuotes( $dbr->timestamp())  . ")))"
+			);
 		}
 
-		if ( count( $wgContribScoreIgnoreUsernames ) ) {
+		if ( count( $wgContribScoreIgnoreUsernames ) > 0) {
 			$listIgnoredUsernames = $dbr->makeList( $wgContribScoreIgnoreUsernames );
-			$sqlWhere[] = "{$revUsername} NOT IN ($listIgnoredUsernames)";
+			$userQuery = $userQuery
+				->where("{user_name} NOT IN ($listIgnoredUsernames)" 
+			);
 		}
+		
+		$users = $userQuery->caller(__METHOD__)->fetchResultSet();
+		$revWhere = ["rev_timestamp > " . $dbr->addQuotes( $dbr->timestamp( $date ) ) ];
 
-		if ( $dbr->unionSupportsOrderAndLimit() ) {
-			$order = [
-				'GROUP BY' => 'rev_user',
-				'ORDER BY' => 'page_count DESC',
-				'LIMIT' => $limit
-			];
-		} else {
-			$order = [ 'GROUP BY' => 'rev_user' ];
+		$scoreTable = [];
+		$k = 0;
+		foreach($users as $row){
+			$user = User::newFromId($row->user_id);
+			echo "" . $row->user_name;
+			$user_score = self::computeScore( $dbr, $user, $revWhere );
+			if ( $k < $limit ) {
+				$entry = [];
+				$entry["user_id"]=$user_id;
+				$entry["user_name"]=$user->getName();
+				$entry["user_real_name"]=$user->getRealName();
+				$entry["page_count"]=self::computeUniquePages( $dbr, $user, $revWhere);
+				$entry["rev_count"]=self::computeChanges( $dbr, $user, $revWhere);
+				$entry["wiki_rank"]=$user_score;
+				$entry["absdiff"]=self::computeAbsDiff( $dbr, $user);
+				$scoreTable[$k]= $entry;
+				$k++;
+				if( $k >= $limit ) {
+					$scoreTable = self::array_sort($scoreTable, 'wiki_rank', SORT_DESC);
+				}
+			}
+			else if ( $score_table[$limit-1] < $user_score) {
+				$entry = [];
+				$entry["user_id"]=$user_id;
+				$entry["user_name"]=$user->getName();
+				$entry["user_real_name"]=$user->getRealName();
+				$entry["page_count"]=self::computeUniquePages( $dbr, $user, $revWhere);
+				$entry["rev_count"]=self::computeChanges( $dbr, $user, $revWhere);
+				$entry["wiki_rank"]=$user_score;
+				$entry["absdiff"]=self::computeAbsDiff( $dbr, $user);
+				$scoreTable[$limit - 1] = $entry;
+				$scoreTable = self::array_sort($scoreTable, 'wiki_rank', SORT_DESC);
+			}
 		}
-
-		$sqlMostPages = $dbr->selectSQLText(
-			$revQuery['tables'],
-			$sqlVars,
-			$sqlWhere,
-			__METHOD__,
-			$order,
-			$revQuery['joins']
-		);
-
-		if ( $dbr->unionSupportsOrderAndLimit() ) {
-			$order['ORDER BY'] = 'rev_count DESC';
+		if ( $k < $limit ) {
+			$scoreTable = self::array_sort($scoreTable, 'wiki_rank', SORT_DESC);
 		}
-
-		$sqlMostRevs = $dbr->selectSQLText(
-			$revQuery['tables'],
-			$sqlVars,
-			$sqlWhere,
-			__METHOD__,
-			$order,
-			$revQuery['joins']
-		);
-
-		$sqlMostPagesOrRevs = $dbr->unionQueries( [ $sqlMostPages, $sqlMostRevs ], false );
-		$res = $dbr->select(
-			[
-				'u' => 'user',
-				's' => new Wikimedia\Rdbms\Subquery( $sqlMostPagesOrRevs ),
-			],
-			[
-				'user_id',
-				'user_name',
-				'user_real_name',
-				'page_count',
-				'rev_count',
-				'wiki_rank' => 'page_count+SQRT(rev_count-page_count)*2',
-			],
-			[],
-			__METHOD__,
-			[
-				'ORDER BY' => 'wiki_rank DESC',
-				'GROUP BY' => 'user_name',
-				'LIMIT' => $limit,
-			],
-			[
-				's' => [
-					'JOIN',
-					'user_id=rev_user'
-				]
-			]
-		);
-		$ret = iterator_to_array( $res );
-		return $ret;
+		return $scoreTable;
 	}
 
 	/// Generates a "Contribution Scores" table for a given LIMIT and date range
@@ -278,6 +273,7 @@ class ContributionScores extends IncludableSpecialPage {
 			"<tr class='header'>\n" .
 			Html::element( 'th', [], $this->msg( 'contributionscores-rank' )->text() ) .
 			Html::element( 'th', [], $this->msg( 'contributionscores-score' )->text() ) .
+			Html::element( 'th', [], $this->msg( 'contributionscores-absdiff' )->text() ) .
 			Html::element( 'th', [], $this->msg( 'contributionscores-pages' )->text() ) .
 			Html::element( 'th', [], $this->msg( 'contributionscores-changes' )->text() ) .
 			Html::element( 'th', [], $this->msg( 'contributionscores-username' )->text() );
@@ -303,16 +299,16 @@ class ContributionScores extends IncludableSpecialPage {
 			}
 
 			// Use real name if option used and real name present.
-			if ( $wgContribScoresUseRealName && $row->user_real_name !== '' ) {
+			if ( $wgContribScoresUseRealName && $row["user_real_name"] !== '' ) {
 				$userLink = Linker::userLink(
-					$row->user_id,
-					$row->user_name,
-					$row->user_real_name
+					$row["user_id"],
+					$row["user_name"],
+					$row["user_real_name"]
 				);
 			} else {
 				$userLink = Linker::userLink(
-					$row->user_id,
-					$row->user_name
+					$row["user_id"],
+					$row["user_name"]
 				);
 			}
 
@@ -321,17 +317,19 @@ class ContributionScores extends IncludableSpecialPage {
 				"<td class='content' style='padding-right:10px;text-align:right;'>" .
 				$lang->formatNum( $user_rank ) .
 				"\n</td><td class='content' style='padding-right:10px;text-align:right;'>" .
-				$lang->formatNum( round( $row->wiki_rank, 0 ) ) .
+				$lang->formatNum( round( $row["wiki_rank"], 0 ) ) .
 				"\n</td><td class='content' style='padding-right:10px;text-align:right;'>" .
-				$lang->formatNum( $row->page_count ) .
+				$lang->formatNum( $row["absdiff"] ) .
 				"\n</td><td class='content' style='padding-right:10px;text-align:right;'>" .
-				$lang->formatNum( $row->rev_count ) .
+				$lang->formatNum( $row["page_count"] ) .
+				"\n</td><td class='content' style='padding-right:10px;text-align:right;'>" .
+				$lang->formatNum( $row["rev_count"] ) .
 				"\n</td><td class='content'>" .
 				$userLink;
 
 			# Option to not display user tools
 			if ( !in_array( 'notools', $opts ) ) {
-				$output .= Linker::userToolLinks( $row->user_id, $row->user_name );
+				$output .= Linker::userToolLinks( $row["user_id"], $row["user_name"] );
 			}
 
 			$output .= Html::closeElement( 'td' ) . "\n";
