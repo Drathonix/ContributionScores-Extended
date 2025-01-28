@@ -215,7 +215,6 @@ class ContributionScores extends IncludableSpecialPage {
 		$k = 0;
 		foreach($users as $row){
 			$user = User::newFromId($row->user_id);
-			echo "" . $row->user_name;
 			$user_score = self::computeScore( $dbr, $user, $revWhere );
 			if ( $k < $limit ) {
 				$entry = [];
