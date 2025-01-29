@@ -146,8 +146,8 @@ class ContributionScores extends IncludableSpecialPage {
 		global $wgContribScoreUseRoughEditCount;
 		$migrate = self::migrate( $dbr, $user, $where, $joins );
 		$revVar = $wgContribScoreUseRoughEditCount ? 'user_editcount' : 'COUNT(rev_id)';
-		//echo $migrate['conds'];
-		//echo "\n";
+		echo $migrate['conds'];
+		echo "\n";
 		$row = $dbr->selectRow(
 			[ 'revision' ] + $migrate['tables'],
 			[ 'rev_count' => $revVar ],
@@ -239,7 +239,10 @@ class ContributionScores extends IncludableSpecialPage {
 		
 		
 		$users = $userQuery->caller(__METHOD__)->fetchResultSet();
-		$revWhere = ["rev_timestamp >= " . ($dbr->timestamp(time()-$timeShift)) ];
+		$revWhere = [];
+		if( $days > 0 ) {
+			array_push( $revWhere,"rev_timestamp >= " . ($dbr->timestamp(time()-$timeShift)) );
+		}
 		$joins = [];
 
 		if ( count( $wgContribScoreTitleFilters ) ) {
@@ -254,16 +257,16 @@ class ContributionScores extends IncludableSpecialPage {
 		$k = 0;
 		foreach($users as $row){
 			$user = User::newFromId($row->user_id);
-			$user_score = self::computeScore( $dbr, $user, $revWhere );
+			$user_score = self::computeScore( $dbr, $user, $revWhere, $joins );
 			if ( $k < $limit ) {
 				$entry = [];
 				$entry["user_id"]=$user_id;
 				$entry["user_name"]=$user->getName();
 				$entry["user_real_name"]=$user->getRealName();
-				$entry["page_count"]=self::computeUniquePages( $dbr, $user, $revWhere);
-				$entry["rev_count"]=self::computeChanges( $dbr, $user, $revWhere);
+				$entry["page_count"]=self::computeUniquePages( $dbr, $user, $revWhere, $joins );
+				$entry["rev_count"]=self::computeChanges( $dbr, $user, $revWhere, $joins );
 				$entry["wiki_rank"]=$user_score;
-				$entry["absdiff"]=self::computeAbsDiff( $dbr, $user, $revWhere);
+				$entry["absdiff"]=self::computeAbsDiff( $dbr, $user, $revWhere, $joins );
 				$scoreTable[$k]= $entry;
 				$k++;
 				if( $k >= $limit ) {
@@ -275,10 +278,10 @@ class ContributionScores extends IncludableSpecialPage {
 				$entry["user_id"]=$user_id;
 				$entry["user_name"]=$user->getName();
 				$entry["user_real_name"]=$user->getRealName();
-				$entry["page_count"]=self::computeUniquePages( $dbr, $user, $revWhere);
-				$entry["rev_count"]=self::computeChanges( $dbr, $user, $revWhere);
+				$entry["page_count"]=self::computeUniquePages( $dbr, $user, $revWhere, $joins );
+				$entry["rev_count"]=self::computeChanges( $dbr, $user, $revWhere, $joins );
 				$entry["wiki_rank"]=$user_score;
-				$entry["absdiff"]=self::computeAbsDiff( $dbr, $user, $revWhere);
+				$entry["absdiff"]=self::computeAbsDiff( $dbr, $user, $revWhere, $joins );
 				$scoreTable[$limit - 1] = $entry;
 				$scoreTable = self::array_sort($scoreTable, 'wiki_rank', SORT_DESC);
 			}
