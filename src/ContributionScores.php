@@ -128,6 +128,7 @@ class ContributionScores extends IncludableSpecialPage {
 	}
 	
 	public static function computeCreatedPages($dbr, $user, $where = [], $joins = ""){
+		array_push($where, 'rev_parent_id IS NULL OR rev_parent_id = 0');
 		$migrate = self::migrate( $dbr , $user, $where );
 		$table = $dbr->select(
 			[ 'revision' . $joins ] + $migrate['tables'],
