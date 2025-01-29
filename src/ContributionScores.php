@@ -128,6 +128,7 @@ class ContributionScores extends IncludableSpecialPage {
 	}
 	
 	public static function computeCreatedPages($dbr, $user, $where = [], $joins = ""){
+		# A revision is a creation if parent id is 0, also checking NULL just in case.
 		array_push($where, 'rev_parent_id IS NULL OR rev_parent_id = 0');
 		$migrate = self::migrate( $dbr , $user, $where );
 		$table = $dbr->select(
@@ -161,7 +162,9 @@ class ContributionScores extends IncludableSpecialPage {
 		return ContributionScores::computeUniquePages( $dbr, $user, $where, $joins )*2 + ContributionScores::computeAbsDiff( $dbr, $user, $where, $joins)/100;
 	}
 	
-
+	/**
+	 * For manual display of a metric. None of the typical filters are applied for the sake of simplicity.
+	*/
 	public static function efContributionScoresRender( $parser, $usertext, $metric = 'score' ) {
 		global $wgContribScoreDisableCache, $wgContribScoreUseRoughEditCount;
 
@@ -237,8 +240,6 @@ class ContributionScores extends IncludableSpecialPage {
 				->where("{user_name} NOT IN ($listIgnoredUsernames)" 
 			);
 		}
-	
-		
 		
 		$users = $userQuery->caller(__METHOD__)->fetchResultSet();
 		$revWhere = [];
