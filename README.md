@@ -8,6 +8,7 @@ The extension is intended to add a fun metric for contributors to see how much t
 3. Added the "Diff" column to the Contribution Scores page generator. This presents absdiff. Also this may need translation, currently it is only declared in the en lang file.
 4. Added the creations metric for cscore. Creations is simply the number of pages a user has created.
 5. A large amount of the database interaction code has been modified and abstracted for each metric.
+6. README > README.md :fire:
 
 # Overview
 ## Scoring Metrics
