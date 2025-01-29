@@ -203,7 +203,7 @@ class ContributionScores extends IncludableSpecialPage {
 	 * @return array Data including the requested Contribution Scores.
 	 */
 	public static function getContributionScoreData( $days = 0, $limit = 50) {
-		global $wgContribScoreIgnoreBots, $wgContribScoreIgnoreBlockedUsers, $wgContribScoreIgnoreUsernames, $wgContribScoreTitleFilters;
+		global $wgContribScoreIgnoreBots, $wgContribScoreIgnoreBlockedUsers, $wgContribScoreIgnoreUsernames, $wgContribScoreTitleFilters, $wgContribScorePageNamespaceFilters;
 		
 		$loadBalancer = MediaWikiServices::getInstance()->getDBLoadBalancer();
 		$dbr = $loadBalancer->getConnection( DB_REPLICA );
@@ -252,6 +252,14 @@ class ContributionScores extends IncludableSpecialPage {
 				array_push( $revWhere, "page_title NOT LIKE '" . $filter ."'" );
 			}
 			$joins = $joins . " JOIN page ON rev_page=page_id";
+		}
+		if ( count($wgContribScorePageNamespaceFilters) ) {
+			foreach( $wgContribScorePageNamespaceFilters as $filter ) {
+				array_push( $revWhere, "page_namespace <> ". $filter);
+			}
+			if ( count( $wgContribScoreTitleFilters ) <= 0 ) {
+				$joins = $joins . " JOIN page ON rev_page=page_id";
+			}
 		}
 
 		$scoreTable = [];

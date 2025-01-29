@@ -32,6 +32,8 @@ $wgContribScoreReports = [
 $wgShowExceptionDetails = true;
 // Exclude specific pages from the reporting - Can be omitted. Must use SQL syntax supported by the "LIKE" operator
 $wgContribScoreTitleFilters = [];
+// Exclude specific page NAMESPACES from the reporting - Must use the namespace id as seen here: https://www.mediawiki.org/wiki/Manual:Namespace. By default all "Talk" namespaces are excluded.
+$wgContribScorePageNamespaceFilters = [1,3,5,7,9,11,13,15];
 ```
 Tweak these settings as you wish!
 Then, place the `ContributionScores` folder in the `extensions` directory like you would any other!
