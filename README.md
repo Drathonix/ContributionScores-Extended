@@ -5,7 +5,9 @@ The extension is intended to add a fun metric for contributors to see how much t
 The original CScores is by Tim Lagua.
 Extended is by Jack Andersen.
 
-# Installation
+# Installation and Upgrading
+Note: You will need to update both the extension and LocalSettings.php for Extended to work.
+
 At the bottom of `LocalSettings.php` add
 ```
 wfLoadExtension( 'ContributionScores' );
@@ -28,6 +30,8 @@ $wgContribScoreReports = [
     [ 0, 50 ]
 ];
 $wgShowExceptionDetails = true;
+// Exclude specific pages from the reporting - Can be omitted. Must use SQL syntax supported by the "LIKE" operator
+$wgContribScoreTitleFilters = [];
 ```
 Tweak these settings as you wish!
 Then, place the `ContributionScores` folder in the `extensions` directory like you would any other!
