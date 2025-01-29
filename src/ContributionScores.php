@@ -146,8 +146,6 @@ class ContributionScores extends IncludableSpecialPage {
 		global $wgContribScoreUseRoughEditCount;
 		$migrate = self::migrate( $dbr, $user, $where, $joins );
 		$revVar = $wgContribScoreUseRoughEditCount ? 'user_editcount' : 'COUNT(rev_id)';
-		echo $migrate['conds'];
-		echo "\n";
 		$row = $dbr->selectRow(
 			[ 'revision' ] + $migrate['tables'],
 			[ 'rev_count' => $revVar ],
@@ -224,9 +222,13 @@ class ContributionScores extends IncludableSpecialPage {
 		$timeShift = $days*24*60*60*1000;
 
 		if ( $wgContribScoreIgnoreBots ) {
-			$userQuery = $userQuery
-				->where("user_id NOT IN (SELECT ug_user FROM `user_groups` WHERE (ug_group = 'bot' AND (ug_expiry IS NULL OR ug_expiry >= " . $dbr->addQuotes( $dbr->timestamp(time()-$timeShift))  . ")))"
-			);
+			$cond = "user_id NOT IN (SELECT ug_user FROM `user_groups` WHERE (ug_group = 'bot' AND (ug_expiry IS NULL";
+			if ( $days > 0 ) {
+				$cond = $cond . " OR ug_expiry >= " . $dbr->addQuotes( $dbr->timestamp(time()-$timeShift)) . ")))";
+			} else {
+				$cond = $cond . ")))";
+			}
+			$userQuery = $userQuery->where($cond);
 		}
 
 		if ( count( $wgContribScoreIgnoreUsernames ) > 0) {
