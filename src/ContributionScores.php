@@ -4,7 +4,6 @@
  */
 
 use MediaWiki\MediaWikiServices;
-use DairikiDiff;
 
 /// Special page class for the Contribution Scores extension
 /**
