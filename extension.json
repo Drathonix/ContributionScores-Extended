@@ -1,9 +1,9 @@
 {
 	"name": "ContributionScores",
-	"author": "Tim Laqua",
+	"author": "Tim Laqua - Extended by Jack Andersen",
 	"url": "https://www.mediawiki.org/wiki/Extension:Contribution_Scores",
 	"descriptionmsg": "contributionscores-desc",
-	"version": "1.26.1",
+	"version": "1.26.1.1",
 	"type": "specialpage",
 	"requires": {
 		"MediaWiki": ">= 1.34.0"
