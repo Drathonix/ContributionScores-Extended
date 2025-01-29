@@ -2,6 +2,34 @@
 The Contribution Scores extension polls the wiki database to locate contributors with the highest contribution volume.
 The extension is intended to add a fun metric for contributors to see how much they are helping out.
 
+# Installation
+At the bottom of `LocalSettings.php` add
+```
+wfLoadExtension( 'ContributionScores' );
+// Exclude Bots from the reporting - Can be omitted.
+$wgContribScoreIgnoreBots = true; 
+// Exclude Blocked Users from the reporting - Can be omitted.
+$wgContribScoreIgnoreBlockedUsers = true;
+// Exclude specific usernames from the reporting - Can be omitted.
+$wgContribScoreIgnoreUsernames = [];
+// Use real user names when available - Can be omitted. Only for MediaWiki 1.19 and later.
+$wgContribScoresUseRealName = true;
+// Set it to true to disable the cache for the parser function and the inclusion of the table.
+$wgContribScoreDisableCache = true;
+// Use the total edit count to compute the Contribution score.
+$wgContribScoreUseRoughEditCount = false;   
+// Each array defines a report - 7,50 is "past 7 days," and "LIMIT 50" - Can be omitted.
+$wgContribScoreReports = [
+    [ 7, 50 ],
+    [ 30, 50 ],
+    [ 0, 50 ]
+];
+$wgShowExceptionDetails = true;
+```
+Tweak these settings as you wish!
+Then, place the `ContributionScores` folder in the `extensions` directory like you would any other!
+Perform any necessary restarts and enjoy!
+
 # Changes in this fork
 1. Added absdiff metric for cscore. Absdiff takes the total length of the characters/bytes changed throughout a user's entire lifetime or a specified number of days and sums them together. Absdiff can be accessed outside of the Top Contributor's page using "{{#cscore:\<USER\>|absdiff}}". As an example changing "a" to "aaaa" has an absdiff value of 3, changing "a" to "bbbb" also has a absdiff value of 3 because the length of the change is the same.
 2. Changed the score calculation from #unique_pages_editted+sqrt(#changes) to absdiff/100+2*#unique_pages_editted. This effectively reverses the scoring from prioritizing #unique_pages_editted to the actual content of the edits.
