@@ -32,7 +32,7 @@ $wgContribScoreReports = [
 $wgShowExceptionDetails = true;
 // Exclude specific pages from the reporting - Can be omitted. Must use SQL syntax supported by the "LIKE" operator
 $wgContribScoreTitleFilters = [];
-// Exclude specific page NAMESPACES from the reporting - Must use the namespace id as seen here: https://www.mediawiki.org/wiki/Manual:Namespace. By default all "Talk" namespaces are excluded.
+// Exclude specific page NAMESPACES from the reporting - Must use the namespace numerical id as seen here: https://www.mediawiki.org/wiki/Manual:Namespace. By default all "Talk" namespaces are excluded.
 $wgContribScorePageNamespaceFilters = [1,3,5,7,9,11,13,15];
 ```
 Tweak these settings as you wish!
@@ -45,7 +45,8 @@ Perform any necessary restarts and enjoy!
 3. Added the "Diff" column to the Contribution Scores page generator. This presents absdiff. Also this may need translation, currently it is only declared in the en lang file.
 4. Added the creations metric for cscore. Creations is simply the number of pages a user has created.
 5. A large amount of the database interaction code has been modified and abstracted for each metric.
-6. README > README.md :fire:
+6. Added filters for page titles and page namespaces to config for easy exclusion of specific pages from being included in Contribution Scores calc.
+7. README > README.md :fire:
 
 # Overview
 ## Scoring Metrics
