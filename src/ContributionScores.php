@@ -66,7 +66,7 @@ class ContributionScores extends IncludableSpecialPage {
 	private static function migrate($dbr, $user, $where = []){
 		$migrate = ActorMigration::newMigration()->getWhere( $dbr, 'rev_user', $user);
 		foreach ( $where as $cond ) {
-			$migrate['conds'] = $migrate['conds'] . ' AND ' . $cond;			
+			$migrate['conds'] = $migrate['conds'] . ' AND (' . $cond . ')';			
 		}		
 		return $migrate;
 	}
@@ -127,7 +127,8 @@ class ContributionScores extends IncludableSpecialPage {
 	}
 	
 	public static function computeCreatedPages($dbr, $user, $where = []){
-		$migrate = self::migrate($dbr,$user,$where . '(rev_parent_id IS NULL OR rev_parent_id = 0)');
+		array_push($where,'(rev_parent_id IS NULL OR rev_parent_id = 0)');
+		$migrate = self::migrate($dbr,$user,$where);
 		$table = $dbr->select(
 			[ 'revision' ] + $migrate['tables'],
 			[ 'rev_page', 'rev_parent_id'],
@@ -136,9 +137,6 @@ class ContributionScores extends IncludableSpecialPage {
 			[],
 			$migrate['joins']
 		);
-		foreach($table as $row){
-			echo "\n" . $row->rev_page . ", " . $row->rev_parent_id;
-		}
 		return count($table);
 	}
 	
@@ -219,9 +217,11 @@ class ContributionScores extends IncludableSpecialPage {
 			);
 		}
 
+		$timeShift = $days*24*60*60*1000;
+
 		if ( $wgContribScoreIgnoreBots ) {
 			$userQuery = $userQuery
-				->where("user_id NOT IN (SELECT ug_user FROM `user_groups` WHERE (ug_group = 'bot' AND (ug_expiry IS NULL OR ug_expiry >= " . $dbr->addQuotes( $dbr->timestamp())  . ")))"
+				->where("user_id NOT IN (SELECT ug_user FROM `user_groups` WHERE (ug_group = 'bot' AND (ug_expiry IS NULL OR ug_expiry >= " . $dbr->addQuotes( $dbr->timestamp(time()-$timeShift))  . ")))"
 			);
 		}
 
@@ -233,7 +233,8 @@ class ContributionScores extends IncludableSpecialPage {
 		}
 		
 		$users = $userQuery->caller(__METHOD__)->fetchResultSet();
-		$revWhere = ["rev_timestamp > " . $dbr->addQuotes( $dbr->timestamp( $date ) ) ];
+		echo "L: " . $dbr->timestamp();
+		$revWhere = ["rev_timestamp >= " . ($dbr->timestamp(time()-$timeShift)) ];
 
 		$scoreTable = [];
 		$k = 0;
