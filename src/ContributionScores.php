@@ -63,18 +63,21 @@ class ContributionScores extends IncludableSpecialPage {
 		return $new_array;
 	}
 	
-	private static function migrate($dbr, $user, $where = []){
+	private static function migrate($dbr, $user, $where = [], $joins = []){
 		$migrate = ActorMigration::newMigration()->getWhere( $dbr, 'rev_user', $user);
 		foreach ( $where as $cond ) {
 			$migrate['conds'] = $migrate['conds'] . ' AND (' . $cond . ')';			
-		}		
+		}	
+		foreach ( $joins as $join ) {
+			$migrate['joins'] = $migrate['joins'] . $join;			
+		}			
 		return $migrate;
 	}
 
-	public static function computeAbsDiff($dbr,$user,$where = []){
+	public static function computeAbsDiff($dbr,$user,$where = [], $joins = []){
 		$revisionLookup = MediaWikiServices::getInstance()->getRevisionLookup();
 		# Collect all revisions by the target user
-		$migrate = self::migrate($dbr,$user,$where);
+		$migrate = self::migrate( $dbr, $user, $where, $joins );
 		$resultSet = $dbr->select(
 			[ 'revision' ] + $migrate['tables'],
 			["rev_id", "rev_parent_id"] ,
@@ -113,8 +116,8 @@ class ContributionScores extends IncludableSpecialPage {
 		return $output;
 	}
 	
-	public static function computeUniquePages($dbr, $user, $where = []){
-		$migrate = self::migrate($dbr,$user,$where);
+	public static function computeUniquePages($dbr, $user, $where = [], $joins = []){
+		$migrate = self::migrate( $dbr, $user, $where, $joins );
 		$row = $dbr->selectRow(
 			[ 'revision' ] + $migrate['tables'],
 			[ 'page_count' => 'COUNT(DISTINCT rev_page)' ],
@@ -126,9 +129,8 @@ class ContributionScores extends IncludableSpecialPage {
 		return $row->page_count;
 	}
 	
-	public static function computeCreatedPages($dbr, $user, $where = []){
-		array_push($where,'(rev_parent_id IS NULL OR rev_parent_id = 0)');
-		$migrate = self::migrate($dbr,$user,$where);
+	public static function computeCreatedPages($dbr, $user, $where = [], $joins = []){
+		$migrate = self::migrate( $dbr , $user, $where, $joins);
 		$table = $dbr->select(
 			[ 'revision' ] + $migrate['tables'],
 			[ 'rev_page', 'rev_parent_id'],
@@ -140,10 +142,12 @@ class ContributionScores extends IncludableSpecialPage {
 		return count($table);
 	}
 	
-	public static function computeChanges($dbr, $user, $where = []){
+	public static function computeChanges($dbr, $user, $where = [], $joins = []){
 		global $wgContribScoreUseRoughEditCount;
-		$migrate = self::migrate($dbr,$user,$where);
+		$migrate = self::migrate( $dbr, $user, $where, $joins );
 		$revVar = $wgContribScoreUseRoughEditCount ? 'user_editcount' : 'COUNT(rev_id)';
+		//echo $migrate['conds'];
+		//echo "\n";
 		$row = $dbr->selectRow(
 			[ 'revision' ] + $migrate['tables'],
 			[ 'rev_count' => $revVar ],
@@ -155,8 +159,8 @@ class ContributionScores extends IncludableSpecialPage {
 		return $row->rev_count;
 	}	
 	
-	public static function computeScore($dbr, $user, $revWhere = []){
-		return ContributionScores::computeUniquePages($dbr,$user,$revWhere)*2 + ContributionScores::computeAbsDiff($dbr,$user,$revWhere)/100;
+	public static function computeScore($dbr, $user, $where = [], $joins = []){
+		return ContributionScores::computeUniquePages( $dbr, $user, $where, $joins )*2 + ContributionScores::computeAbsDiff( $dbr, $user, $where, $joins)/100;
 	}
 	
 
@@ -201,7 +205,7 @@ class ContributionScores extends IncludableSpecialPage {
 	 * @return array Data including the requested Contribution Scores.
 	 */
 	public static function getContributionScoreData( $days = 0, $limit = 50) {
-		global $wgContribScoreIgnoreBots, $wgContribScoreIgnoreBlockedUsers, $wgContribScoreIgnoreUsernames;
+		global $wgContribScoreIgnoreBots, $wgContribScoreIgnoreBlockedUsers, $wgContribScoreIgnoreUsernames, $wgContribScoreTitleFilters;
 		
 		$loadBalancer = MediaWikiServices::getInstance()->getDBLoadBalancer();
 		$dbr = $loadBalancer->getConnection( DB_REPLICA );
@@ -231,10 +235,20 @@ class ContributionScores extends IncludableSpecialPage {
 				->where("{user_name} NOT IN ($listIgnoredUsernames)" 
 			);
 		}
+	
+		
 		
 		$users = $userQuery->caller(__METHOD__)->fetchResultSet();
-		echo "L: " . $dbr->timestamp();
 		$revWhere = ["rev_timestamp >= " . ($dbr->timestamp(time()-$timeShift)) ];
+		$joins = [];
+
+		if ( count( $wgContribScoreTitleFilters ) ) {
+			foreach( $wgContribScoreTitleFilters as $filter ) {
+				array_push( $revWhere, "'page_title' NOT LIKE '" . $filter ."'" );
+			}
+			array_push($joins,"'page' ON revision.rev_page=page.page_id");
+		}
+	
 
 		$scoreTable = [];
 		$k = 0;
