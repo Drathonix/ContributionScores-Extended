@@ -29,6 +29,7 @@ $wgContribScoreReports = [
     [ 30, 50 ],
     [ 0, 50 ]
 ];
+//Extended features start here.
 // Exclude specific pages from the reporting - Can be omitted. Must use SQL syntax supported by the "LIKE" operator
 $wgContribScoreTitleFilters = [];
 // Exclude specific page NAMESPACES from the reporting - Must use the namespace numerical id as seen here: https://www.mediawiki.org/wiki/Manual:Namespace. By default all "Talk" namespaces are excluded.
