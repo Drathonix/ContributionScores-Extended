@@ -4,7 +4,7 @@
 	},
 	"contributionscores": "Contribution scores",
 	"contributionscores-desc": "Polls the wiki database for highest [[Special:ContributionScores|user contribution volume]]",
-	"contributionscores-info": "The score primarily measures unique pages edited, with consideration for high edit volume.",
+	"contributionscores-info": "The score primarily measures total edit length, with a slight boost to those who edit more unique pages.",
 	"contributionscores-top": "(Top $1)",
 	"contributionscores-days": "Last {{PLURAL:$1|day|$1 days}}",
 	"contributionscores-allrevisions": "All time",

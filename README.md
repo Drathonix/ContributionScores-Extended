@@ -60,3 +60,8 @@ Displays the number of revisions the user has submitted.
 Displays the total difference in character length between all the user's revisions. As an example changing "a" to "bbbb" yields an absdiff of 3.
 ### \{\{\#cscore:\<user\>|creations\}\}
 The total number of pages the user has created.
+
+# Necessary Translations
+The "contributionscores-info" translation has been changed on the English end, requires translation.
+"contributionscores-absdiff" - only present in English translations.
+
